@@ -7,6 +7,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 import subprocess
+import shutil
 import time
 import requests
 import json
@@ -179,6 +180,9 @@ def step_2_node_tracking(sample_percent=100):
     
     # 1. Khởi chạy IPFS daemon — Cross-platform (không dùng grep/pipe)
     print("[*] Đang khởi chạy IPFS Daemon trong background...")
+    if shutil.which("ipfs") is None:
+        print("[-] Không tìm thấy lệnh 'ipfs' trong PATH. Hãy cài IPFS hoặc thêm vào PATH rồi chạy lại.")
+        return None
     bitswap_log_path = os.path.join(OUTPUT_DIR, "bitswap_monitor.log")
     bitswap_stop_event.clear()
     
@@ -419,6 +423,10 @@ if __name__ == "__main__":
             print("\nResume: Nếu bị gián đoạn (Ctrl+C), chạy lại lệnh sẽ tự động resume.")
             sys.exit(0)
     
+    if sample_percent < 1 or sample_percent > 100:
+        print(f"[!] Giá trị sample ngoài phạm vi [1, 100]: {sample_percent}. Sẽ được giới hạn trong phạm vi này.")
+        sample_percent = max(1, min(100, sample_percent))
+
     print("="*60)
     print("  IF-DSS Case Study 1: IPFS Phishing Investigation Pipeline")
     print(f"  OS: {platform.system()} | Sample: {sample_percent}% | Resume: Tự động")
