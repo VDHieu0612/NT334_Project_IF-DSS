@@ -1,97 +1,233 @@
-# Hướng dẫn Cài đặt Môi trường cho Case Study 1
+# IF-DSS: Khung Điều tra Pháp y cho Hệ thống Lưu trữ Phi tập trung
 
-## Yêu cầu hệ thống
-
-- Hệ điều hành: Linux (Ubuntu/Debian/CentOS...)
-- Python: 3.x trở lên
-- Có quyền `sudo` để cài đặt phần mềm.
+> **IF-DSS** (Forensic Investigation Framework for Decentralized Storage Systems) — Bộ công cụ mã nguồn mở hỗ trợ điều tra pháp y trên hệ thống lưu trữ phi tập trung IPFS, dựa trên bài báo khoa học:
+>
+> *"IF-DSS: An investigation framework for decentralized storage systems"* — Forensic Science International: Digital Investigation, 2023.
 
 ---
 
-## Bước 1: Cài đặt và Cấu hình Kubo (IPFS) v0.19.0
+## Mục lục
 
-Dự án yêu cầu cài đặt Kubo (IPFS Client) để truy vết các node. Dưới đây là hướng dẫn cài đặt phiên bản `v0.19.0` cho kiến trúc `linux-amd64`.
+- [Tổng quan](#tổng-quan)
+- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
+- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
+- [Cài đặt](#cài-đặt)
+  - [Bước 1: Cài đặt Kubo (IPFS)](#bước-1-cài-đặt-kubo-ipfs)
+  - [Bước 2: Thiết lập Python](#bước-2-thiết-lập-python)
+- [Cách sử dụng](#cách-sử-dụng)
+  - [CLI chính (main.py)](#cli-chính-mainpy)
+  - [Case Study 1: Pipeline tự động](#case-study-1-pipeline-tự-động)
+- [Kết quả đầu ra](#kết-quả-đầu-ra)
+- [Giấy phép](#giấy-phép)
 
-### 1. Tải file nén Kubo
+---
 
-Mở terminal và chạy lệnh sau để tải về:
+## Tổng quan
 
-```bash
-wget https://dist.ipfs.tech/kubo/v0.19.0/kubo_v0.19.0_linux-amd64.tar.gz
+Project triển khai thực nghiệm các module chính từ framework IF-DSS:
+
+| Module | Mô tả | File |
+|--------|--------|------|
+| **Parse** | Bóc tách CID (Content ID) từ URL phishing | `src/parse.py` |
+| **Track** | Truy vết node IPFS đang lưu trữ nội dung phishing (findprovs + findpeer) | `src/track.py` |
+| **DNSLink** | Truy vấn DNS TXT record để tìm CID ẩn dưới tên miền | `src/dnslink.py` |
+| **IP Map** | Tạo bản đồ HTML hiển thị vị trí địa lý các IP node | `src/ipmap.py` |
+| **Reassemble** | Tái tạo file gốc từ các block IPFS | `src/reassemble.py` |
+
+**Case Study 1** kết hợp tất cả module trên thành một pipeline điều tra tự động end-to-end, từ thu thập dữ liệu PhishTank đến xuất báo cáo IOC.
+
+---
+
+## Cấu trúc thư mục
+
+```
+NT334_Project_IF-DSS/
+├── main.py                  # CLI chính (click-based)
+├── requirements.txt         # Thư viện Python cần thiết
+├── LICENSE                  # MIT License
+│
+├── src/                     # Module chính
+│   ├── parse.py             #   Bóc tách CID từ URL
+│   ├── track.py             #   Truy vết node IPFS
+│   ├── dnslink.py           #   Truy vấn DNSLink
+│   ├── ipmap.py             #   Bản đồ IP
+│   ├── reassemble.py        #   Tái tạo file từ block IPFS
+│   ├── proto/               #   Protobuf schema cho IPFS
+│   └── developerAPI/        #   Script tương tác API (Fleek, Web3.Storage)
+│
+├── CaseStudy1/              # Case Study 1: IPFS Phishing Investigation
+│   ├── pipeline.py          #   Pipeline tự động end-to-end
+│   └── output/              #   Kết quả (tự sinh khi chạy)
+│
+├── dataset/                 # Tập dữ liệu mẫu
+└── kubo/                    # Script cài đặt Kubo (IPFS client)
 ```
 
-### 2. Giải nén và cài đặt
+---
+
+## Yêu cầu hệ thống
+
+| Yêu cầu | Chi tiết |
+|----------|----------|
+| **Hệ điều hành** | Windows 10/11 hoặc Linux (Ubuntu/Debian/CentOS...) |
+| **Python** | 3.8 trở lên |
+| **Kubo (IPFS)** | v0.19.0 (hoặc tương thích) |
+| **Kết nối mạng** | Cần thiết cho truy vết P2P và tải dữ liệu |
+
+---
+
+## Cài đặt
+
+### Bước 1: Cài đặt Kubo (IPFS)
+
+<details>
+<summary><b>🐧 Linux</b></summary>
 
 ```bash
+# Tải Kubo v0.19.0
+wget https://dist.ipfs.tech/kubo/v0.19.0/kubo_v0.19.0_linux-amd64.tar.gz
+
+# Giải nén và cài đặt
 tar -xvzf kubo_v0.19.0_linux-amd64.tar.gz
 cd kubo
 sudo bash install.sh
-```
 
-### 3. Kiểm tra cài đặt
-
-```bash
+# Kiểm tra
 ipfs --version
-# Kết quả mong đợi: ipfs version 0.19.0
+# Kết quả: ipfs version 0.19.0
 ```
 
-### 4. Khởi tạo IPFS Node
+</details>
 
-Cần khởi tạo cấu hình cục bộ cho IPFS (chỉ chạy lệnh này 1 lần duy nhất):
+<details>
+<summary><b>🪟 Windows</b></summary>
+
+1. Tải Kubo v0.19.0 cho Windows tại:
+   ```
+   https://dist.ipfs.tech/kubo/v0.19.0/kubo_v0.19.0_windows-amd64.zip
+   ```
+
+2. Giải nén file `.zip` vào thư mục bất kỳ (ví dụ: `C:\kubo`).
+
+3. Thêm đường dẫn thư mục chứa `ipfs.exe` vào biến môi trường `PATH`:
+   - Mở **Settings** → **System** → **About** → **Advanced system settings** → **Environment Variables**
+   - Chỉnh sửa biến `Path` → Thêm đường dẫn (ví dụ: `C:\kubo`)
+
+4. Kiểm tra:
+   ```powershell
+   ipfs --version
+   # Kết quả: ipfs version 0.19.0
+   ```
+
+</details>
+
+#### Khởi tạo IPFS Node (chạy 1 lần duy nhất)
 
 ```bash
 ipfs init
 ```
 
-### 5. Cấu hình Connection Manager (Bắt buộc)
+#### Cấu hình Connection Manager (bắt buộc)
 
-Để theo dõi được lượng lớn kết nối P2P phục vụ cho việc điều tra, cần tinh chỉnh lại giới hạn kết nối (ConnMgr) của IPFS. Chạy 2 lệnh sau:
+Tăng giới hạn kết nối để theo dõi được nhiều node hơn:
 
 ```bash
 ipfs config --json Swarm.ConnMgr.LowWater 10000
 ipfs config --json Swarm.ConnMgr.HighWater 15000
 ```
 
-## Bước 2: Thiết lập môi trường Python
+---
 
-### 1. Tạo môi trường ảo (Virtual Environment)
-
-Di chuyển vào thư mục gốc của dự án và tạo môi trường ảo để tránh xung đột thư viện:
+### Bước 2: Thiết lập Python
 
 ```bash
-python3 -m venv venv
-```
+# Clone repository
+git clone https://github.com/<your-username>/<your-repo>.git
+cd <your-repo>
 
-### 2. Kích hoạt môi trường ảo
+# Tạo môi trường ảo
+python -m venv venv
 
-```bash
+# Kích hoạt môi trường ảo
+# Linux/macOS:
 source venv/bin/activate
-```
+# Windows (PowerShell):
+.\venv\Scripts\Activate.ps1
 
-### 3. Cài đặt các thư viện phụ thuộc
-
-Cài đặt các gói Python được liệt kê trong file requirements.txt:
-
-```bash
+# Cài đặt thư viện
 pip install -r requirements.txt
 ```
 
-## Bước 3: Chạy Pipeline Phân tích
+---
 
-Sau khi môi trường đã sẵn sàng, không cần phải tự chạy IPFS Daemon thủ công vì mã nguồn pipeline.py đã tự động hóa việc này.
+## Cách sử dụng
 
-Chỉ cần chạy lệnh duy nhất sau đây:
+### CLI chính (main.py)
 
 ```bash
-python3 pipeline.py
+# Xem danh sách lệnh
+python main.py --help
+
+# Bóc tách CID từ file CSV
+python main.py parse <file_csv> -o <output_dir>
+
+# Truy vết node IPFS (cần IPFS daemon đang chạy)
+python main.py track <file_cid> --ipfs ipfs -o <output_dir>
+
+# Truy vấn DNSLink
+python main.py trackdns <file_dns> -o <output_dir>
+
+# Tạo bản đồ IP
+python main.py ipmap <file_track_json> -o <output_dir>
+
+# Tái tạo file từ IPFS block
+python main.py reassemble <block_dir> -o <output_dir>
 ```
 
-Quá trình này sẽ tự động:
+### Case Study 1: Pipeline tự động
 
-- Kéo tập dữ liệu từ Phishtank.
-- Bóc tách CID.
-- Kích hoạt IPFS Daemon ngầm và thu thập log Bitswap.
-- Truy vết IP của các node chứa file lừa đảo.
-- Xuất các file báo cáo, IOC và biểu đồ Timeline vào thư mục output/.
+Pipeline tự động hóa toàn bộ quy trình điều tra phishing trên IPFS:
 
-Lưu ý: Quá trình truy vết mạng P2P có thể mất khá nhiều thời gian tùy thuộc vào số lượng mẫu cấu hình.
+```bash
+cd CaseStudy1
+
+# Chạy đầy đủ 100% CID
+python pipeline.py
+
+# Chạy với 5% CID (để test nhanh)
+python pipeline.py --sample 5
+
+# Xem hướng dẫn
+python pipeline.py --help
+```
+
+**Tính năng nổi bật:**
+- Tự động tải dữ liệu mới nhất từ PhishTank
+- Tự khởi động/tắt IPFS Daemon
+- Thu thập log Bitswap để phân tích timeline
+- Hỗ trợ **Resume** — nếu bị gián đoạn (Ctrl+C), chạy lại sẽ tự động tiếp tục từ vị trí đã dừng
+- Xuất bản đồ IP, biểu đồ timeline, và báo cáo IOC
+
+---
+
+## Kết quả đầu ra
+
+Sau khi chạy pipeline, thư mục `CaseStudy1/output/` sẽ chứa:
+
+| File | Mô tả |
+|------|--------|
+| `cid_result.txt` | Danh sách CID phishing bóc tách được |
+| `track.json` | Kết quả truy vết (CID → IP node) |
+| `IPMAP_result.html` | Bản đồ HTML vị trí các node |
+| `blacklist_ioc.json` | Báo cáo IOC (Indicators of Compromise) |
+| `forensic_timeline_frequency.png` | Biểu đồ tần suất truy vấn theo thời gian |
+| `forensic_timeline_top_cids.png` | Top 10 CID bị truy vấn nhiều nhất |
+| `bitswap_monitor.log` | Log raw từ Bitswap engine |
+
+---
+
+## Giấy phép
+
+Dự án được phân phối theo [MIT License](LICENSE).
+
+Dựa trên mã nguồn gốc của [hunjison/IF-DSS](https://github.com/hunjison/IF-DSS).

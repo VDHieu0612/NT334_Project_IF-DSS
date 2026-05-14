@@ -1,2 +1,48 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# === Virtual Environment ===
 venv/
 .venv/
+env/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Environment / Secrets ===
+.env
+.env.local
+
+# === Node.js ===
+node_modules/
+package-lock.json
+
+# === Binary / Large Files ===
+*.tar.gz
+*.7z
+*.zip
+*.pdf
+
+# === Case Study Output (regenerable) ===
+CaseStudy1/output/
+output/
+
+# === Case Study Data (downloadable from PhishTank) ===
+CaseStudy1/online-valid.csv
+CaseStudy1/verified_online.csv

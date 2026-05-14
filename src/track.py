@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+import sys
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 import base64, base58
 import subprocess, json, os
 
@@ -31,10 +36,19 @@ def URL_to_CID(fd):
 def findprovs(ipfs_path, CID):
     try:    # Check collected phishing site errors
         args = [ipfs_path, 'dht', 'findprovs', CID]
-        output = subprocess.check_output(args)
+        output = subprocess.check_output(args, timeout=120, stderr=subprocess.STDOUT)
         output = output.decode('utf-8').split("\n")
         output = list(dict.fromkeys(output))
         output = output[:len(output)-1]
+    except subprocess.TimeoutExpired:
+        print(f"  [TIMEOUT] findprovs cho {CID[:16]}... đã quá 120 giây, bỏ qua.")
+        output = []
+    except subprocess.CalledProcessError as e:
+        err_msg = e.output.decode('utf-8', errors='replace') if e.output else ''
+        if 'online mode' in err_msg:
+            print(f"Error: {err_msg.strip()}")
+            return 'OFFLINE'
+        output = []
     except:
         output = []
     return output
@@ -46,12 +60,12 @@ def findpeer(ipfs_path, Node_ID):
         if NodeID in Gateway_NodeID:
             continue
         args = [ipfs_path, 'dht', 'findpeer', NodeID]
-        # output = subprocess.check_output(args)
-        # output = output.decode('utf-8').split('\n')
 
         try:
-            output = subprocess.check_output(args)
+            output = subprocess.check_output(args, timeout=60)
             output = output.decode('utf-8').split('\n')
+        except subprocess.TimeoutExpired:
+            continue
         except subprocess.CalledProcessError:
             continue
 
@@ -67,29 +81,84 @@ def findpeer(ipfs_path, Node_ID):
     return IP_LIST  
 
 def node_track(file_path, ipfs, output):
-    duplication = []
-    result = {}
+    # --- RESUME: Load checkpoint nếu có ---
+    dup_path = os.path.join(output, "track_duplicate.json")
+    track_path = os.path.join(output, "track.json")
+    
+    if os.path.exists(dup_path):
+        try:
+            with open(dup_path, "r") as f:
+                duplication = json.load(f)
+            print(f"  [RESUME] Loaded checkpoint: {len(duplication)} CID đã track trước đó.")
+        except (json.JSONDecodeError, Exception):
+            duplication = []
+    else:
+        duplication = []
+    
+    if os.path.exists(track_path) and len(duplication) > 0:
+        try:
+            with open(track_path, "r") as f:
+                result = json.load(f)
+            print(f"  [RESUME] Loaded kết quả cũ: {len(result)} CID có provider.")
+        except (json.JSONDecodeError, Exception):
+            result = {}
+    else:
+        result = {}
+    
     CID_LIST = URL_to_CID(fd = open(file_path,"r"))
-    CID_LIST = set(CID_LIST) # CID deduplicate
+    CID_LIST = list(set(CID_LIST)) # CID deduplicate
     ipfs_path = ipfs
+    
+    # Đếm số CID cần track (trừ đã track)
+    remaining = [cid for cid in CID_LIST if cid not in duplication]
+    total = len(CID_LIST)
+    already_done = total - len(remaining)
+    
+    if already_done > 0:
+        print(f"  [RESUME] Tổng: {total} CID | Đã track: {already_done} | Còn lại: {len(remaining)}")
 
     yn = input("Is your IPFS daemon running? (y/n): ")
     if yn.lower() != "y":
         return
 
+    tracked_count = already_done
+    found_count = len(result)
+    offline_streak = 0  # Đếm số lần liên tiếp daemon offline
+    
     for CID in CID_LIST:
         if CID in duplication:
             continue
+        
+        tracked_count += 1
+        print(f"  [{tracked_count}/{total}] Đang track: {CID[:20]}...", end=" ", flush=True)
+        
         NodeID = findprovs(ipfs_path, CID)
+        
+        # Phát hiện daemon offline → dừng ngay
+        if NodeID == 'OFFLINE':
+            offline_streak += 1
+            if offline_streak >= 3:
+                print(f"\n  [!] IPFS Daemon đã tắt (3 lần liên tiếp). Dừng tracking.")
+                print(f"  [!] Checkpoint đã lưu. Chạy lại pipeline để resume.")
+                break
+            continue
+        offline_streak = 0  # Reset nếu daemon hoạt động bình thường
+        
         if NodeID != []:
             result_IPs = findpeer(ipfs_path, NodeID)
             result_findpeer = {'IP' : result_IPs}
             result[CID] = result_findpeer
-            print(CID, result_findpeer)
+            found_count += 1
+            print(f"[OK] Tim thay {len(result_IPs)} IP (tong found: {found_count})")
             duplication.append(CID)
 
+            # Save checkpoint sau mỗi CID thành công
             json.dump(result, open(os.path.join(output, "track.json"),"w"))
-            # Save for preparing that ipfs daemon quit while collecting
             json.dump(duplication, open(os.path.join(output, "track_duplicate.json"),"w"))
         else:
-            print(f"{CID}'s provider node is not founded. It may blocked in gateways or in pinning services")
+            print(f"[--] Khong tim thay provider")
+            # Vẫn đánh dấu đã xử lý để không track lại
+            duplication.append(CID)
+            json.dump(duplication, open(os.path.join(output, "track_duplicate.json"),"w"))
+    
+    print(f"\n  [DONE] Hoàn tất tracking: {found_count}/{total} CID có provider.")

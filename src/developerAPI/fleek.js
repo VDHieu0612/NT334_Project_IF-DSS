@@ -1,5 +1,5 @@
 // Your Key goes here
-const fleekAPIKey = "htCvmwK8hk1H1XDY/rd5eLWqOih1Zq1URZ8ykXJzwRg=";
+const fleekAPIKey = process.env.FLEEK_API_KEY || "YOUR_FLEEK_API_KEY";
 
 // Your site name goes here
 const your_site_name = process.argv[2]
