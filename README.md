@@ -59,7 +59,6 @@ NT334_Project_IF-DSS/
 │   ├── pipeline.py          #   Pipeline tự động end-to-end
 │   └── output/              #   Kết quả (tự sinh khi chạy)
 │
-├── dataset/                 # Tập dữ liệu mẫu
 └── kubo/                    # Script cài đặt Kubo (IPFS client)
 ```
 
