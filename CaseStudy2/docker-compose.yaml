@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  ipfs-node:
+    image: ipfs/kubo:latest # Sử dụng Kubo, phần mềm client chính thức của IPFS
+    container_name: suspect_ipfs_node
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8081:8080"
+    volumes:
+      # Ánh xạ thư mục .ipfs ra ngoài máy host để dễ dàng thu thập
+      - ./suspect_data:/data/ipfs
+    restart: unless-stopped

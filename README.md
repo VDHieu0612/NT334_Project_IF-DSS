@@ -58,7 +58,9 @@ NT334_Project_IF-DSS/
 ├── CaseStudy1/              # Case Study 1: IPFS Phishing Investigation
 │   ├── pipeline.py          #   Pipeline tự động end-to-end
 │   └── output/              #   Kết quả (tự sinh khi chạy)
-│
+├── CaseStudy2/
+│   ├── docker-compose.yaml
+│   ├── wiki_my/
 └── kubo/                    # Script cài đặt Kubo (IPFS client)
 ```
 
@@ -224,6 +226,123 @@ Sau khi chạy pipeline, thư mục `CaseStudy1/output/` sẽ chứa:
 | `bitswap_monitor.log` | Log raw từ Bitswap engine |
 
 ---
+# Case Study 2: Phục hồi Dữ liệu IPFS (Local Forensics)
+
+| Mục | Nội dung |
+|-----|----------|
+| **Dự án** | Điều tra Pháp y Mạng lưu trữ phi tập trung (IPFS) |
+| **Mục tiêu** | Mô phỏng quá trình tội phạm phát tán tài liệu cấm (Cơ sở dữ liệu Wikipedia tiếng Myanmar) lên mạng IPFS và thực nghiệm quy trình thu thập, khôi phục bằng chứng từ các mảnh vỡ (Chunks) nhị phân tại máy tính cục bộ của nghi phạm bằng công cụ IF-DSS. |
+
+---
+
+## 🛠 Môi trường Thực nghiệm
+
+| Thành phần | Chi tiết |
+|------------|----------|
+| **Công cụ** | Docker (chạy Node IPFS Kubo), Python (môi trường ảo `venv`) |
+| **Tang vật gốc** | `wikipedia_my_all_maxi_2021-02.zim` (~826 MB) |
+| **Framework Pháp y** | IF-DSS |
+
+---
+
+## 📝 Quy trình Thực thi & Lệnh Command Line
+
+### Bước 1: Khởi tạo Hiện trường *(Mô phỏng Nghi phạm)*
+
+Khởi động máy chủ IPFS cục bộ dưới dạng container chạy ngầm.
+
+```powershell
+docker compose up -d
+```
+
+> **Lưu ý:** Lệnh khởi tạo cấu trúc thư mục `.ipfs` được ánh xạ ra ngoài máy Host tại:
+> `path_to\CaseStudy2\suspect_data`
+
+---
+
+### Bước 2: Đưa Tang vật vào Vùng đệm
+
+Sao chép tệp tin tài liệu cấm từ ổ cứng Windows của nghi phạm vào thư mục tạm `/tmp/` bên trong container IPFS.
+
+```powershell
+docker cp "path_to/wikipedia_my_all_maxi_2021-02.zim" `
+    suspect_ipfs_node:/tmp/wikipedia_my_all_maxi_2021-02.zim
+```
+
+---
+
+### Bước 3: Phân mảnh & Mã hóa Dữ liệu *(Băm tệp)*
+
+Ép IPFS Node thực hiện băm nát tệp tin thành các khối dữ liệu (Merkle DAG chunks) để phát tán.
+
+```powershell
+docker exec -it suspect_ipfs_node ipfs add -w /tmp/wikipedia_my_all_maxi_2021-02.zim
+```
+
+> **🔍 Đánh giá Pháp y — Tầm quan trọng của cờ `-w`**
+>
+> Lệnh sử dụng tham số `-w` (`--wrap-with-directory`). Tham số này chỉ thị cho IPFS tự động tạo ra một **thư mục gốc (Directory Object / Tree node)** bao bọc lấy tệp tin `.zim`. Nhờ có khối Tree này, **siêu dữ liệu (Metadata)** chứa tên gốc của tệp tin (`wikipedia_my_all...zim`) được bảo toàn trong cấu trúc đồ thị. Đây là tiền đề bắt buộc để công cụ pháp y có thể định danh đúng tên bằng chứng ở bước sau.
+
+---
+
+### Bước 4: Tịch thu & Khôi phục Bằng chứng *(Điều tra viên)*
+
+Sử dụng công cụ IF-DSS chạy kịch bản tự động để quét toàn bộ các mảnh dữ liệu thô (Blobs) trong ổ cứng của nghi phạm, phân tích các liên kết (Links/Lists) và ghép nối lại thành tệp tin nguyên bản.
+
+```powershell
+python main.py reassemble "path_to\CaseStudy2\suspect_data"
+```
+
+---
+
+## 📊 Kết quả Khám nghiệm (Artifacts)
+
+Sau khi chạy hoàn tất **Bước 4**, hệ thống kết xuất thành công thư mục `reassemble` chứa:
+
+### 1. Tang vật nguyên vẹn
+
+Tệp `wikipedia_my_all_maxi_2021-02.zim` với dung lượng **~826 MB**, trùng khớp mã Hash với tệp gốc của nghi phạm. Dữ liệu có thể đọc/mở bình thường bằng phần mềm **Kiwix**.
+
+### 2. Biên bản Ánh xạ (`file_mapping.json`)
+
+Tệp log ghi nhận toàn bộ quá trình khớp nối giữa:
+
+- **Mã băm CID** — địa chỉ trên mạng P2P
+- **Tên tệp vật lý** — đường dẫn trên Windows
+
+Đảm bảo tính toàn vẹn của **Chuỗi Hành trình Chứng cứ (Chain of Custody)**.
+
+---
+
+## 🔗 Sơ đồ Quy trình Tổng quan
+
+```
+[Nghi phạm]                          [Điều tra viên]
+     │                                      │
+     ▼                                      │
+Khởi động IPFS Node (Docker)               │
+     │                                      │
+     ▼                                      │
+Đưa tệp .zim vào container                 │
+     │                                      │
+     ▼                                      │
+ipfs add -w → Phân mảnh thành              │
+Merkle DAG Chunks (Blobs)                  │
+     │                                      │
+     ▼                                      ▼
+[Ổ cứng nghi phạm: suspect_data/]  ←  Thu thập vật chứng
+     │                                      │
+     └──────────────────────────────────────►
+                                            │
+                                            ▼
+                               IF-DSS: python main.py reassemble
+                                            │
+                                            ▼
+                               Ghép nối Chunks → .zim nguyên bản
+                                            │
+                                            ▼
+                               file_mapping.json (Chain of Custody)
+```
 
 ## Giấy phép
 
