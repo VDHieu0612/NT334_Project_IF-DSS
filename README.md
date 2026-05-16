@@ -226,7 +226,7 @@ Sau khi chạy pipeline, thư mục `CaseStudy1/output/` sẽ chứa:
 | `bitswap_monitor.log` | Log raw từ Bitswap engine |
 
 ---
-# Case Study 2: Phục hồi Dữ liệu IPFS (Local Forensics)
+### Case Study 2: Phục hồi Dữ liệu IPFS (Local Forensics)
 
 | Mục | Nội dung |
 |-----|----------|
